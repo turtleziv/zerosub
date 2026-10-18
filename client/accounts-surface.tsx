@@ -15,6 +15,7 @@ import {
   type ReopenSummary,
 } from "../shared/rpc";
 import { AddAccountModal } from "./add-account";
+import { AUTOMATIC_ROWS, DEFAULT_ACCOUNT_ROWS, SWITCH_ROWS, type SwitchKey } from "./preference-rows";
 import { ResetConfirm, redeemToast, resetBadge } from "./reset-confirm";
 import { describe, useStore, VISIBLE_POLL_MS, type ZeroSubStore } from "./store";
 import { Badge, Button, Card, IconButton, UsageBar, useText } from "./ui";
@@ -612,57 +613,35 @@ function AutomationSettings({ theme }: { theme: Theme }) {
   }
   const save = (patch: Partial<typeof settings.values>) =>
     void settings.save({ ...settings.values, ...patch }, settings.revision);
+  const toggle = (key: SwitchKey) => {
+    const row = SWITCH_ROWS[key];
+    return (
+      <SettingsSwitch
+        key={key}
+        label={row.label}
+        hint={row.hint}
+        value={settings.values[key]}
+        disabled={settings.saving || (row.needsAutoSwitch && !settings.values.autoSwitch)}
+        onValueChange={(value) => save({ [key]: value })}
+      />
+    );
+  };
   return (
-    <View style={{ gap: 10 }}>
-      <Text style={text.heading} accessibilityRole="header">
-        Automatic switching
-      </Text>
-      <SettingsCard>
-        <SettingsSwitch
-          label="Switch accounts when one hits its limit"
-          hint="Agents move to the account with the most room left."
-          value={settings.values.autoSwitch}
-          disabled={settings.saving}
-          onValueChange={(autoSwitch) => save({ autoSwitch })}
-        />
-        <SettingsSwitch
-          label="Keep going after a switch"
-          hint="Sends a short follow-up so the interrupted task continues."
-          value={settings.values.autoContinue}
-          disabled={settings.saving || !settings.values.autoSwitch}
-          onValueChange={(autoContinue) => save({ autoContinue })}
-        />
-        <SettingsSwitch
-          label="Spread new agents across accounts"
-          hint="New agents start on the account with the most room instead of the default."
-          value={settings.values.balanceNewAgents}
-          disabled={settings.saving}
-          onValueChange={(balanceNewAgents) => save({ balanceNewAgents })}
-        />
-        <SettingsSwitch
-          label="Move open agents when the default changes"
-          hint="Off: open agents stay on the account they're using, even after they reopen. New agents, and agents that aren't open at the time, use the new default."
-          value={settings.values.moveAgentsOnDefaultChange}
-          disabled={settings.saving}
-          onValueChange={(moveAgentsOnDefaultChange) => save({ moveAgentsOnDefaultChange })}
-        />
-        <SettingsSwitch
-          label="Use banked resets when every account is out"
-          hint="Spends one of the account's banked resets instead of stopping. Resets are scarce, so this is off unless you turn it on."
-          value={settings.values.autoRedeem}
-          disabled={settings.saving || !settings.values.autoSwitch}
-          onValueChange={(autoRedeem) => save({ autoRedeem })}
-        />
-        <SettingsSwitch
-          label="When every account is out, fork the chat to the other provider"
-          hint="A stopped Claude chat carries on in a new ChatGPT agent, or the other way round, with the conversation so far. The new agent gets no more permissions than the original; the original stays as it was."
-          value={settings.values.forkOtherProvider}
-          disabled={settings.saving || !settings.values.autoSwitch}
-          onValueChange={(forkOtherProvider) => save({ forkOtherProvider })}
-        />
-      </SettingsCard>
-      {settings.saveError ? <Text style={text.danger}>{settings.saveError}</Text> : null}
-    </View>
+    <>
+      <View style={{ gap: 10 }}>
+        <Text style={text.heading} accessibilityRole="header">
+          Default account
+        </Text>
+        <SettingsCard>{DEFAULT_ACCOUNT_ROWS.map(toggle)}</SettingsCard>
+      </View>
+      <View style={{ gap: 10 }}>
+        <Text style={text.heading} accessibilityRole="header">
+          Automatic switching
+        </Text>
+        <SettingsCard>{AUTOMATIC_ROWS.map(toggle)}</SettingsCard>
+        {settings.saveError ? <Text style={text.danger}>{settings.saveError}</Text> : null}
+      </View>
+    </>
   );
 }
 
