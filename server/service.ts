@@ -436,15 +436,34 @@ export class Service {
     const accountId = this.runningOn(await this.store.read(), agentId, family);
     if (accountId) this.activeAt.set(accountId, Date.now());
     if (event.outcome.kind !== "canceled") {
-      const hit = adapter.detectLimit(event);
-      if (hit) return this.handleUnavailable(context.paseo, agentId, family, event.timeline, { kind: "limit", hit });
-      if (adapter.detectSignOut(event) && (await this.confirmSignedOut(agentId, family))) {
-        return this.handleUnavailable(context.paseo, agentId, family, event.timeline, { kind: "signed_out" });
+      const turn = await this.turnWithTimeline(context.paseo, event);
+      const hit = adapter.detectLimit(turn);
+      if (hit) return this.handleUnavailable(context.paseo, agentId, family, turn.timeline, { kind: "limit", hit });
+      if (adapter.detectSignOut(turn) && (await this.confirmSignedOut(agentId, family))) {
+        return this.handleUnavailable(context.paseo, agentId, family, turn.timeline, { kind: "signed_out" });
       }
     }
     if (this.deferred.has(agentId)) await this.finishDeferred(context.paseo, agentId, family);
     // The turn just used the account: read its usage again as soon as the provider allows.
     if (accountId) void this.refreshUsage(accountId).catch(() => undefined);
+  }
+
+  /**
+   * Paseo 0.13 (getpaseo/paseo#7477) stopped copying the conversation into turn-ended hooks: `timeline`
+   * is always `[]`. Claude reports its limits as an ordinary reply, so when the hook arrives empty the
+   * tail of the agent's timeline is paged here and read as the turn. A hook that did send the turn
+   * (Paseo 0.12) is used as is; a turn that never started (`turnId === null`) has nothing to read, as
+   * `notices()` in limits.ts ignores its timeline anyway. If the page can't be read the event stands.
+   */
+  private async turnWithTimeline(paseo: PluginHookContext["paseo"], event: TurnEnded): Promise<TurnEnded> {
+    if (event.turnId === null || event.timeline.length > 0) return event;
+    try {
+      const page = await paseo.agents.ref(event.agent.id).timeline.refetch({ direction: "tail", limit: 40 });
+      return { ...event, timeline: page.entries.map((entry) => entry.item) };
+    } catch (error) {
+      log(`could not read the last turn of ${event.agent.id}`, error);
+      return event;
+    }
   }
 
   async onAgentArchived(agentId: string): Promise<void> {
